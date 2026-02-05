@@ -3,7 +3,7 @@ import iconv from 'iconv-lite';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { HttpProxyAgent } from 'http-proxy-agent';
 
-const PROXY = 'http://192.168.28.2:8180';
+const PROXY = 'http://abook_vless:8118';
 const httpsAgent = new HttpsProxyAgent(PROXY);
 const httpAgent = new HttpProxyAgent(PROXY);
 

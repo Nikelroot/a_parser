@@ -9,7 +9,9 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let lastPage = 0;
 
 async function Run(callback) {
-  const forum = await Forum.sort({}).findOne({ hasLink: false }).lean();
+  const forum = await Forum.findOne({ hasLink: false, magnet_try: { $lte: 3 } })
+    .sort({ inLibrary: -1, lastParse: 1 })
+    .lean();
 
   const uri = forum.href;
 
@@ -18,14 +20,25 @@ async function Run(callback) {
   const $ = cheerio.load(html);
 
   const link = $('.magnet-link').attr('href');
-  console.log('link', link);
+  console.log('link', forum.title, link);
 
   if (link) {
-    await Forum.updateOne({ _id: forum._id }, { $set: { hasLink: true, magnet_link: link } });
-    callback();
+    await Forum.updateOne(
+      { _id: forum._id },
+      {
+        $set: { hasLink: true, magnet_link: link, lastParse: +new Date() },
+        $inc: { magnet_try: 1 }
+      }
+    ).exec();
   } else {
-    callback();
+    await Forum.updateOne(
+      { _id: forum._id },
+      {
+        $inc: { magnet_try: 1 }
+      }
+    ).exec();
   }
+  callback();
 }
 
 async function init() {
