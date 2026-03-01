@@ -1,8 +1,11 @@
 import * as cheerio from 'cheerio';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 import Forum from '../models/Forum.js';
 import moment from 'moment';
 import { request } from './service.js';
+import { applyTrackMetadataToForumModel } from './metadata.js';
 
 const URLS = [
   '1909',
@@ -101,5 +104,8 @@ async function create(item) {
     await forum.save();
   }
 
-  await Forum.updateOne({ _id: forum._id }, { $set: { title, cat, date } });
+  const forumModel = { title, cat, date };
+  applyTrackMetadataToForumModel(forumModel);
+
+  await Forum.updateOne({ _id: forum._id }, { $set: forumModel });
 }

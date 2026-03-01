@@ -7,7 +7,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
-    "link": "node parseLink.js"
+    "link": "node parseLink.js",
+    "metadata": "node parseMetadata.js"
   },
   "keywords": [],
   "author": "",
