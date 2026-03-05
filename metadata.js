@@ -1,3 +1,5 @@
+import { log } from 'async';
+
 const EMPTY_METADATA = {
   title: '',
   author: '',
@@ -10,56 +12,130 @@ const EMPTY_METADATA = {
   parsedQuality: 0
 };
 
-function parseTrackMetadataFields(str = '') {
-  const items = String(str)
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-
-  const result = { ...EMPTY_METADATA };
-
-  for (const item of items) {
-    if (item.startsWith('title:')) result.title = item.slice(6).trim();
-    else if (item.startsWith('author:')) result.author = item.slice(7).trim();
-    else if (item.startsWith('narrator:')) result.narrator = item.slice(9).trim();
-    else if (item.startsWith('year:')) result.year = item.slice(5).trim();
-    else if (item.startsWith('quality:')) result.quality = item.slice(8).trim();
-    else if (item.startsWith('format:')) result.format = item.slice(7).trim();
-    else if (item.startsWith('tags:')) result.tags = item.slice(5).trim();
-    else if (item.startsWith('parsed:')) result.parsed = item.slice(7).trim() === 'true';
-    else if (item.startsWith('parsedQuality:')) {
-      result.parsedQuality = parseInt(item.slice(14).trim(), 10) || 0;
+function parseTrackMetadata(input) {
+  if (!input || typeof input !== 'string')
+    return {
+      title: null,
+      author: null,
+      narrator: null,
+      year: null,
+      quality: null,
+      format: null,
+      tags: [],
+      parsed: false,
+      parsedQuality: 0
+    };
+  let s = input.trim(),
+    result = {
+      title: null,
+      author: null,
+      narrator: null,
+      year: null,
+      quality: null,
+      format: null,
+      tags: [],
+      parsed: false,
+      parsedQuality: 0
+    };
+  let author = null,
+    title = null,
+    narrator = null,
+    year = null,
+    quality = null,
+    format = null,
+    tags = [];
+  let confidence = 0;
+  const metaMatch = s.match(/\[([^\]]+)\]\s*$/);
+  let metaBlock = metaMatch ? metaMatch[1] : null;
+  if (metaMatch) s = s.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
+  const dashMatch = s.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+  if (dashMatch) {
+    author = dashMatch[1].trim();
+    title = dashMatch[2].trim();
+    confidence += 25;
+  } else {
+    title = s.trim();
+  }
+  if (title) {
+    const nMatch = title.match(
+      /(?:читает|в исполнении|в записи|озвучение|voice|read by|чтец)\s*[:\s]+([^-[]+?)(?:\s*[-–—]|$)/i
+    );
+    if (nMatch) {
+      narrator = nMatch[1].trim().replace(/[,\.\)]+$/, '');
+      title = title.replace(nMatch[0], '').trim();
+      confidence += 25;
+    }
+    const sMatch = title.match(/(?:серия|цикл|серии)\s*[:\s]+([^-[]+?)(?:\s*[-–—]|$)/i);
+    if (sMatch) {
+      const seriesText = sMatch[1].trim().replace(/[,\.\)]+$/, '');
+      tags.push(
+        ...seriesText
+          .split(/[,\+]/)
+          .map((t) => t.trim())
+          .filter(Boolean)
+      );
+      title = title.replace(sMatch[0], '').trim();
     }
   }
-
-  if (result.author && result.title && result.narrator && result.year) {
-    result.parsed = true;
+  if (metaBlock) {
+    const parts = metaBlock.split(',').map((p) => p.trim());
+    parts.forEach((p) => {
+      const yMatch = p.match(/^(\d{4})$/);
+      if (yMatch) {
+        year = parseInt(yMatch[1], 10);
+        confidence += 25;
+      }
+      const qMatch = p.match(/(\d{2,3})\s*k?bps/i);
+      if (qMatch) {
+        quality = `${qMatch[1]} kbps`;
+        confidence += parseInt(qMatch[1]);
+      }
+      const fMatch = p.match(/\b(mp3|flac|wav|aac|ogg|lossless|m4b|m4a)\b/i);
+      if (fMatch) {
+        format = fMatch[1].toUpperCase();
+        confidence += 25;
+      }
+      if (!narrator && /чтец|читает|narrator|read by|voice/i.test(p)) {
+        narrator = p.replace(/.*?(чтец|читает|narrator|read by|voice)[^:]*[:\s]+/i, '').trim();
+        confidence += 25;
+      }
+    });
+    if (!narrator && parts.length > 0) {
+      const first = parts[0].trim();
+      if (
+        !/^\d{4}$/.test(first) &&
+        !/\d{2,3}\s*k?bps/i.test(first) &&
+        !['mp3', 'flac', 'wav', 'aac', 'ogg', 'lossless', 'm4b', 'm4a'].some((f) =>
+          first.toLowerCase().includes(f)
+        )
+      ) {
+        narrator = first;
+        confidence += 25;
+      }
+    }
   }
-  if (!result.parsedQuality && result.parsed) {
-    result.parsedQuality = 100;
+  if (!author && title) {
+    const parts = title.split(/\s*[-–—]\s*/);
+    if (parts.length > 1) {
+      author = parts[0].trim();
+      title = parts.slice(1).join(' - ').trim();
+      confidence += 25;
+    }
   }
-
+  if (!author) confidence -= 25;
+  if (!title) confidence -= 25;
+  if (!narrator) confidence -= 25;
+  if (!year) confidence -= 25;
+  result.author = author || null;
+  result.title = title || null;
+  result.narrator = narrator || null;
+  result.year = year || null;
+  result.quality = quality || null;
+  result.format = format || null;
+  result.tags = tags.length ? tags : [];
+  result.parsedQuality = Math.max(0, Math.min(100, confidence));
+  result.parsed = !!(author && title && narrator && year);
   return result;
 }
 
-export function parseTrackMetadata(str) {
-  const result = parseTrackMetadataFields(str);
-  return `title:${result.title},author:${result.author},narrator:${result.narrator},year:${result.year},quality:${result.quality},format:${result.format},tags:${result.tags},parsed:${result.parsed},parsedQuality:${result.parsedQuality}`;
-}
-
-export function applyTrackMetadataToForumModel(forumItem) {
-  const originalTitle = forumItem?.title ?? '';
-  const metadata = parseTrackMetadataFields(originalTitle);
-
-  forumItem.title = metadata.title || originalTitle;
-  forumItem.author = metadata.author;
-  forumItem.narrator = metadata.narrator;
-  forumItem.year = metadata.year;
-  forumItem.quality = metadata.quality;
-  forumItem.format = metadata.format;
-  forumItem.tags = metadata.tags;
-  forumItem.parsed = metadata.parsed;
-  forumItem.parsedQuality = metadata.parsedQuality;
-
-  return forumItem;
-}
+export { parseTrackMetadata };

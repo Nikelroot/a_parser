@@ -1,5 +1,5 @@
 import Forum from '../models/Forum.js';
-import { applyTrackMetadataToForumModel } from './metadata.js';
+import { parseTrackMetadata } from './metadata.js';
 
 async function run() {
   const cursor = Forum.find({}, { _id: 1, title: 1 }).lean().cursor();
@@ -10,19 +10,12 @@ async function run() {
   for await (const item of cursor) {
     processed += 1;
 
-    const forumModel = { title: item.title ?? '' };
-    applyTrackMetadataToForumModel(forumModel);
+    const data = parseTrackMetadata(item?.title);
+    console.log('parseTrackMetadata', data);
 
     const update = {
-      title: forumModel.title,
-      author: forumModel.author,
-      narrator: forumModel.narrator,
-      year: forumModel.year,
-      quality: forumModel.quality,
-      format: forumModel.format,
-      tags: forumModel.tags,
-      parsed: forumModel.parsed,
-      parsedQuality: forumModel.parsedQuality
+      data,
+      parsedQuality: data.parsedQuality
     };
 
     await Forum.updateOne({ _id: item._id }, { $set: update }).exec();
