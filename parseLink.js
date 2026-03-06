@@ -4,6 +4,16 @@ import async from 'async';
 import Forum from '../models/Forum.js';
 import moment from 'moment';
 import { request } from './service.js';
+import linkLogger from './logger/linkLogger.js';
+
+process.on('unhandledRejection', (reason) => {
+  linkLogger.error(`unhandled rejection: ${reason?.stack || reason?.message || reason}`);
+});
+
+process.on('uncaughtException', (error) => {
+  linkLogger.error(`uncaught exception: ${error?.stack || error?.message || error}`);
+  process.exit(1);
+});
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let lastPage = 0;
@@ -20,7 +30,9 @@ async function Run(callback) {
   const $ = cheerio.load(html);
 
   const link = $('.magnet-link').attr('href');
-  console.log('link', forum.title, link);
+  linkLogger.info(
+    `parsed link forumId=${forum._id.toString()} title="${forum.title}" hasLink=${Boolean(link)}`
+  );
 
   if (link) {
     await Forum.updateOne(

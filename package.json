@@ -8,7 +8,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
     "link": "node parseLink.js",
-    "metadata": "node parseMetadata.js"
+    "metadata": "node parseMetadata.js",
+    "hrefs": "node updateForumHrefs.js"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +24,7 @@
     "iconv-lite": "^0.7.2",
     "lodash": "^4.17.21",
     "moment": "^2.30.1",
-    "mongoose": "^9.1.3"
+    "mongoose": "^9.1.3",
+    "winston": "^3.18.3"
   }
 }

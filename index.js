@@ -6,6 +6,16 @@ import Forum from '../models/Forum.js';
 import moment from 'moment';
 import { request } from './service.js';
 import { applyTrackMetadataToForumModel } from './metadata.js';
+import parserLogger from './logger/index.js';
+
+process.on('unhandledRejection', (reason) => {
+  parserLogger.error(`unhandled rejection: ${reason?.stack || reason?.message || reason}`);
+});
+
+process.on('uncaughtException', (error) => {
+  parserLogger.error(`uncaught exception: ${error?.stack || error?.message || error}`);
+  process.exit(1);
+});
 
 const URLS = [
   '1909',
@@ -39,10 +49,11 @@ const URLS = [
 ];
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const RESTART_DELAY_MS = 24 * 60 * 60 * 1000;
 let lastPage = 0;
 
 async function Run(cat, page = 0) {
-  const uri = `https://rutracker.org/forum/viewforum.php?f=${cat}&start=${page * 50}`;
+  const uri = `https://rutracker.net/forum/viewforum.php?f=${cat}&start=${page * 50}`;
 
   const html = await request(uri);
 
@@ -71,7 +82,9 @@ async function Run(cat, page = 0) {
     await create(item);
   }
 
-  console.log('length', items.length, cat, page, `of ${lastPage}`);
+  parserLogger.info(
+    `parsed category=${cat} page=${page} items=${items.length} lastPage=${lastPage}`
+  );
   if (page >= lastPage) {
     return false;
   } else {
@@ -80,20 +93,29 @@ async function Run(cat, page = 0) {
   }
 }
 
-async function init() {
+async function runOnce() {
   for (const u of URLS) {
     await Run(u, 0).catch((e) => {
-      console.error('ERR:', e?.message);
+      parserLogger.error(`parse category=${u} failed: ${e?.message || e}`);
       if (e?.response) {
-        console.error('STATUS:', e.response.status);
-        console.error('HEADERS:', e.response.headers);
+        parserLogger.error(
+          `parse category=${u} response status=${e.response.status} headers=${JSON.stringify(e.response.headers)}`
+        );
       }
     });
   }
-  process.exit(0);
 }
 
-init();
+async function start() {
+  while (true) {
+    parserLogger.info('parser iteration started');
+    await runOnce();
+    parserLogger.info(`parser iteration finished, next run in ${RESTART_DELAY_MS / (60 * 60 * 1000)}h`);
+    await delay(RESTART_DELAY_MS);
+  }
+}
+
+await start();
 
 async function create(item) {
   const { href, title, cat, date } = item;
